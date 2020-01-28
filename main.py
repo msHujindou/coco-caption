@@ -43,7 +43,7 @@ def convert_tsv_to_coco_format(res_tsv, gt_file, outfile,
             parts = line.strip().split(sep)
             key = parts[key_col]
             cap = parts[cap_col]
-            if key.starswith(http_prefix):
+            if key.startswith(http_prefix):
                 key = key[len(http_prefix):]
                 key = lower_key2key[key]
 
@@ -117,10 +117,10 @@ if __name__ == '__main__':
     #get_url_lst()
     dirpath = '/home/xiaowh/work/qd_data/GettyImages/coco_eval/'
     gt_fpath = op.join(dirpath, 'caption_gt.json')
-    eval_res_file = op.join(dirpaht, 'eval_res.json')
+    eval_res_file = op.join(dirpath, 'eval_res.json')
 
     new_model = 'prod_thres2kmax'
-    new_res_file = op.join(dirpath, 'gettyimages.thres2kmax.caption.tsv')
+    new_res_file = op.join(dirpath, 'gettyimages.thres2kmax.res.tsv')
     new_outfile = op.join(dirpath, 'res_{}.json'.format(new_model))
     convert_tsv_to_coco_format(new_res_file, gt_fpath, new_outfile)
 
