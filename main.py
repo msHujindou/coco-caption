@@ -10,15 +10,55 @@ from json import encoder
 encoder.FLOAT_REPR = lambda o: format(o, '.3f')
 import os.path as op
 
-dirpath = '/home/xiaowh/work/qd_data/getty_images_test'
-gt_fpath = op.join(dirpath, 'caption_gt.json')
-res_name2path = {n: op.join(dirpath, 'res_{}.json'.format(n)) for n in ['prod',
-    'vlp_ce', 'vlp_scst']}
-#infile = '/home/xiaowh/work/qd_data/getty_images_test/gettyimages_all_auto_and_manual_captions_vlp.csv'
-infile = '/home/xiaowh/work/qd_data/getty_images_test/gettyimages_all_auto_and_manual_captions_vlp_fixed_empty.csv'
-eval_res_file = infile + '_eval.json'
+
+def get_url_lst():
+    url_file = '/home/xiaowh/work/qd_data/GettyImages/url.label.tsv'
+    url_lst = '/home/xiaowh/work/qd_data/GettyImages/gettyimages.url.lst'
+    urls = []
+    with open(url_file, 'r') as fp:
+        for line in fp:
+            parts = line.split('\t')
+            urls.append(parts[0])
+    with open(url_lst, 'w') as fp:
+        for l in urls:
+            fp.write(l)
+            fp.write('\n')
+
+def get_image_key_to_id(gt_file):
+    gt = json.load(open(gt_file))
+    gt_anns = gt['annotations']
+    image_key2id = {}
+    for ann in gt_anns:
+        image_key2id[ann['key']] = ann['image_id']
+    return image_key2id
+
+def convert_tsv_to_coco_format(res_tsv, gt_file, outfile,
+        sep='\t', key_col=0, cap_col=1):
+    image_key2id = get_image_key_to_id(gt_file)
+    lower_key2key = {k.lower(): k for k in image_key2id}
+    results = []
+    http_prefix = 'https://osizewuspersimmon001.blob.core.windows.net/m365content/publish/'
+    with open(res_tsv) as fp:
+        for line in fp:
+            parts = line.strip().split(sep)
+            key = parts[key_col]
+            cap = parts[cap_col]
+            if key.starswith(http_prefix):
+                key = key[len(http_prefix):]
+                key = lower_key2key[key]
+
+            results.append(
+                        {'image_id': image_key2id[key], 'key': key,
+                        'caption': cap}
+                        )
+    with open(outfile, 'w') as fp:
+        json.dump(results, fp)
 
 def csv2res():
+    dirpath = '/home/xiaowh/work/qd_data/getty_images_test'
+    #infile = '/home/xiaowh/work/qd_data/getty_images_test/gettyimages_all_auto_and_manual_captions_vlp.csv'
+    infile = '/home/xiaowh/work/qd_data/getty_images_test/gettyimages_all_auto_and_manual_captions_vlp_fixed_empty.csv'
+
     sep = ','
     gt_col = 3
     res_cols = [[1, 'prod'], [6, 'vlp_ce'], [7, 'vlp_scst']]
@@ -38,7 +78,8 @@ def csv2res():
                 cap = parts[res_col].strip()
                 if cap == '':
                     continue
-                all_res[res_name].append({'image_id': idx, 'key': key,
+                all_res[res_name].append(
+                        {'image_id': idx, 'key': key,
                         'caption': cap})
     with open(gt_fpath, 'w') as fp:
         json.dump({'annotations': gt_anns, 'images': gt_imgs,
@@ -47,33 +88,45 @@ def csv2res():
         with open(res_name2path[res_name], 'w') as fp:
             json.dump(all_res[res_name], fp)
 
-csv2res()
+def main(gt_fpath, res_name2path, eval_res_file):
+    coco = COCO(gt_fpath)
+    eval_res = {}
+    for res_name, res_path in res_name2path.items():
+        eval_res[res_name] = {}
+        cocoRes = coco.loadRes(res_path)
+
+        # create cocoEval object by taking coco and cocoRes
+        cocoEval = COCOEvalCap(coco, cocoRes, 'corpus')
+
+        # evaluate on a subset of images by setting
+        # cocoEval.params['image_id'] = cocoRes.getImgIds()
+        # please remove this line when evaluating the full validation set
+        cocoEval.params['image_id'] = cocoRes.getImgIds()
+
+        # evaluate results
+        # SPICE will take a few minutes the first time, but speeds up due to caching
+        cocoEval.evaluate()
+        for metric, score in cocoEval.eval.items():
+            eval_res[res_name][metric] = score
+
+    with open(eval_res_file, 'w') as fp:
+        json.dump(eval_res, fp, sort_keys=True, indent = 2)
 
 
-#demo_ann_path = 'annotations/captions_val2014.json'
-#res_path = 'results/captions_val2014_fakecap_results.json'
-#demo_ann = json.load(open(demo_ann_path, 'r'))
-#import ipdb;ipdb.set_trace(context=15)
-ann_path = gt_fpath
-coco = COCO(ann_path)
-eval_res = {}
-for res_name, res_path in res_name2path.items():
-    eval_res[res_name] = {}
-    cocoRes = coco.loadRes(res_path)
+if __name__ == '__main__':
+    #get_url_lst()
+    dirpath = '/home/xiaowh/work/qd_data/GettyImages/coco_eval/'
+    gt_fpath = op.join(dirpath, 'caption_gt.json')
+    eval_res_file = op.join(dirpaht, 'eval_res.json')
 
-    # create cocoEval object by taking coco and cocoRes
-    cocoEval = COCOEvalCap(coco, cocoRes, 'corpus')
+    new_model = 'prod_thres2kmax'
+    new_res_file = op.join(dirpath, 'gettyimages.thres2kmax.caption.tsv')
+    new_outfile = op.join(dirpath, 'res_{}.json'.format(new_model))
+    convert_tsv_to_coco_format(new_res_file, gt_fpath, new_outfile)
 
-    # evaluate on a subset of images by setting
-    # cocoEval.params['image_id'] = cocoRes.getImgIds()
-    # please remove this line when evaluating the full validation set
-    cocoEval.params['image_id'] = cocoRes.getImgIds()
+    res_name2path = {
+        n: op.join(dirpath, 'res_{}.json'.format(n))
+               for n in ['prod', 'vlp_ce', 'vlp_scst'] + [new_model]
+    }
+    main(gt_fpath, res_name2path, eval_res_file)
 
-    # evaluate results
-    # SPICE will take a few minutes the first time, but speeds up due to caching
-    cocoEval.evaluate()
-    for metric, score in cocoEval.eval.items():
-        eval_res[res_name][metric] = score
-
-with open(eval_res_file, 'w') as fp:
-    json.dump(eval_res, fp, sort_keys=True, indent = 2)
