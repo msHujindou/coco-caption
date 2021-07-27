@@ -15,14 +15,14 @@ def export_pdf_to_json(pdf):
         for itm in row["results"]:
             resjson.append({"image_id": row["img_key"], "caption": itm["text"]})
         pass
-    with open("office.json", "w") as fw:
+    with open("getty.json", "w") as fw:
         json.dump(resjson, fw)
         pass
     return resjson
 
 
 df, _ = extract_tsv_prediction_results_to_pdf(
-    "user_inserted_clean.v3.2-nocl.20210507.tsv"
+    "getty_images_clean.v3.2-nocl.20210507.tsv"
 )
 js = export_pdf_to_json(df)
 print(js)
